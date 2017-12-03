@@ -1,0 +1,3 @@
+dimension reduction methods
+
+too many covariates

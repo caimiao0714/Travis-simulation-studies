@@ -1,0 +1,298 @@
+---
+title: "Matching and Propensity Scores"
+author: "Travis Loux"
+date: '`r format(Sys.Date(), format="%b %d, %Y")`'
+output:
+  beamer_presentation:
+    incremental: no
+    fig_width: 4
+    fig_height: 3
+  ioslides_presentation:
+    incremental: yes
+    widescreen: yes
+---
+
+## Matching and propensity scores
+
+- Why match?
+- Matching methods
+- Propensity scores
+- Matching in `R`
+- Diagnostics
+- Analysis of matched data
+
+
+## Why match?
+
+- Matching pairs units in the treatment group to units in the control group
+    - Numerous ways to do this
+
+- Subjects not similar enough to be matched are discarded
+
+
+## Why match?
+
+- Matching can be thought of as **pre-processing** your data
+- Yields treatment and control groups much more similar
+    - Exchangeable
+
+
+## Why match?
+
+- After matching, treatment should be approximately independent of covariates
+    - Similar to randomized studies, but only for observed variables
+
+- Estimates of treatment effect are less model-dependent
+
+
+## Why match?
+
+[Shiny example]
+
+
+## Matching methods
+
+- Matching methods have two main components
+    - **Distance**: computing how far subjects are away from each other
+    - **Matching algorithm**: how subjects are paired together
+
+
+## Matching methods
+
+**Euclidean distance** measures the distance between two subjects in the measurement units
+
+```{r, echo=FALSE, fig.align='center'}
+x = rnorm(n=50, mean=5, sd=2)
+y = rnorm(n=50, mean=5, sd=1)
+
+par(mar=c(5,4,1,1))
+plot(x, y, xlim=c(0,13), ylim=c(0,10), frame=FALSE)
+points(x=c(2,6), y=c(3,6), col='blue', pch=19, cex=1.2)
+lines(x=c(2,6), y=c(3,6), col='blue', lwd=2)
+d_eu = sqrt((2-6)^2 + (3-6)^2)
+text(x=8, y=8, labels=paste0("dist = ",round(d_eu,2)), cex=1.5)
+```
+
+
+## Matching methods
+
+**Mahalanobis distance** measured the distance between two subjects in standardized units
+
+- Accounts for different variances and correlations
+
+```{r, echo=FALSE, fig.align='center'}
+par(mar=c(5,4,1,1))
+plot(x, y, xlim=c(0,13), ylim=c(0,10), frame=FALSE)
+points(x=c(2,6), y=c(3,6), col='blue', pch=19, cex=1.2)
+lines(x=c(2,6), y=c(3,6), col='blue', lwd=2)
+d_mal = sqrt(((2-6)/2)^2 + (3-6)^2)
+text(x=8, y=8, labels=paste0("dist = ",round(d_mal,2)), cex=1.5)
+```
+
+
+## Matching methods
+
+- **One-to-one**: one treatment to one control
+- **One-to-m**: one treatment to $m$ controls
+- **One-to-many**: one treatment to a varying number of controls
+- **Many-to-many**: varying numbers of treatments and controls
+    - sometimes called **full matching**
+
+
+## Matching methods
+
+- **Exact**: only matches subjects with perfect concordance
+- **Nearest neighbor**: matches treatment to "closest" control
+    - **Greedy**: finds the best match at the given point
+    - May lead to unmatchable subjects later
+- **Optimal**: finds the set of matches that minimizes the total distance between all matched pairs
+
+
+## Matching methods
+
+- **Calipers** or **matching windows**: a limit on how far apart subjects can be and still be considered "matchable"
+    - Exact matching has a caliper of 0
+    - Difficult to determine in high-dimensional space
+
+- **Bias-variance trade off**
+
+
+## Propensity scores
+
+The **propensity score** is one tool to get around the high-dimensional problem in matching
+
+- Defined as probability of treatment conditional on a set of covariates
+$$e(x) = P(T = 1 \mid X=x)$$
+
+- The PS is a **balancing score**: any variable controlled for in $e(x)$ is balanced between treatment and control group
+    - The coarsest balancing score
+
+
+## Propensity scores
+
+Benefits of using propensity score
+
+- Dimension reduction: reduces a complex set of variables to a single number
+    - Between 0 and 1
+- Accounts for differences in scaling across variables
+- Gives a quantitative difference between levels of categorical variables
+
+
+## Propensity scores
+
+Limitations of using propensity score
+
+- Dimension reduction loses information
+- Reliant on model assumptions
+    - Not as much as outcome regression
+- Does not balance excluded variables
+    - Worse balance?
+
+
+## Propensity scores
+
+- The range of the propensity score is 0 to 1
+    - Bounded differences
+    - Especially problematic at the extremes
+- Can use **linear propensity score**
+    - Often by taking logit
+    - $log\left( \frac{p}{1-p}\right)$
+
+
+## Propensity scores
+
+```{r, echo=FALSE, fig.align='center'}
+library(boot)
+curve(logit(x), main='Linear Propensity score', frame=FALSE)
+```
+
+
+## Matching in `R`
+
+- The most common tool for matching in `R` is the **MatchIt** package
+    - `install.packages('MatchIt')` - only once
+    - `library(MatchIt)` - every R session
+
+- For detailed help, <http://gking.harvard.edu/matchit>
+
+
+## Matching in `R`
+
+- Question: Are the sentences for crack cocaine longer than those for powder cocaine?
+- Data: Monitoring of Federal Criminal Sentences, 2010
+    - United States Sentencing Commission
+
+- Build a DAG for this scenario
+
+
+## Matching in `R`
+
+```{r}
+library(MatchIt)
+load('drugs.RData')
+nrow(drugs)
+table(drugs$drug)
+```
+
+
+## Matching in `R`
+
+To match data, use **matchit()** function
+
+- Needs to have a binary treatment indicator
+- Needs complete data (no missing values)
+
+
+## Matching in `R`
+
+```{r}
+drugs$crack = as.numeric(drugs$drug == 'Crack')
+
+drugs_complete = na.omit(drugs)
+nrow(drugs_complete)
+
+matching = matchit(crack ~ age + circuit + sex + 
+                     citizen + educ + race, 
+                   data=drugs_complete, 
+                   method='nearest', 
+                   distance='logit', 
+                   caliper=0.10)
+```
+
+
+## Diagnostics
+
+Important diagnostics to check:
+
+- Number of treated left unmatched
+    - More important than controls
+- Distributions of covariates before and after matching
+    - Means
+    - Distribution of propensity scores
+    
+
+## Diagnostics
+
+- For numerical diagnostics, use `summary(matching)`
+- For graphical diagnostics, use `plot(matching)`
+    - `plot(matching)` gives qq plots for all covariates
+    - `plot(matching, type='jitter')` gives dot plots of PS
+    - `plot(matching, type='hist')` gives histograms of PS
+    - `plot(summary(matching,standardize=TRUE))`
+
+
+## Analysis of matched data
+
+To extract the matched data set, use **match.data()** function:
+
+```{r}
+match_drugs = match.data(matching, distance='ps')
+
+nrow(match_drugs)
+table(match_drugs$drug)
+```
+
+
+## Analysis of matched data
+
+The new data set, `match_drugs`, can be analyzed as a standard data set
+
+- $t$ tests or odds ratios
+- Regression methods
+- Non-parametric estimates
+
+
+## Analysis of matched data
+
+```{r}
+sentence_model = lm(sentence ~ age + circuit + sex + 
+                      citizen + educ + race + drug, 
+                    data=match_drugs)
+
+sent_sum = summary(sentence_model)
+round(sent_sum$coefficients['drugCrack', ], 2)
+```
+
+
+## Analysis of matched data
+
+```{r}
+alt_model = glm(alternative ~ age + circuit + sex + 
+                  citizen + educ + race + drug, 
+                family=binomial('logit'), data=match_drugs)
+
+alt_sum = summary(alt_model)
+round(alt_sum$coefficients['drugCrack', ], 2)
+exp(alt_sum$coefficients['drugCrack', 'Estimate'])
+```
+
+
+## Analysis of matched data
+
+In matching, we usually start with the treatment group and find a control for each treated subject
+
+- Covariate distributions look like the treatment group
+- Will lead to an estimate of ATT
+- Good estimate to the extent treated subjects were dropped
+    - Will change covariate distribution of remaining subjects
+    - Dropping too many treated subjects results in the population being ill-defined

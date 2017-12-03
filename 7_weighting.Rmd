@@ -1,0 +1,473 @@
+---
+title: "Inverse Probability Weighting"
+author: "Travis Loux"
+date: '`r format(Sys.Date(), format="%b %d, %Y")`'
+output:
+  ioslides_presentation:
+    incremental: yes
+    widescreen: yes
+  beamer_presentation:
+    fig_height: 3
+    fig_width: 4
+    incremental: no
+---
+
+## Inverse probability weighting
+
+- Propensity scores
+- IPW
+- Weighting diagnostics
+- Standard errors and confidence intervals
+
+
+# Propensity scores
+
+
+## Propensity scores
+
+- Probability of treatment given observed covariates
+- $$e(x) = P(T=1 \mid X=1)$$
+
+- Treated and control with same propensity score come from balanced populations
+    - Distribution of covariates same across treatment groups
+    - No confounding by $X$
+
+
+## Propensity scores
+
+```{r, echo=FALSE}
+tr = rep(0:1, each=100)
+x1 = rnorm(n=200, mean=tr/2)
+x2 = rnorm(n=200, mean=-tr/4)
+x3 = rnorm(n=200, mean=tr)
+
+pscr = glm(tr ~ x1 + x2 + x3, family=binomial('logit'))$fitted
+
+tr_jit = jitter(tr)
+plot(pscr, tr_jit, xlim=0:1, frame=FALSE, 
+     xlab='Propensity score', 
+     yaxt='n', ylab='Treatment group')
+axis(side=2, at=0:1, labels=c('Control','Treatment'), lwd=0)
+```
+
+
+## Propensity scores
+
+```{r}
+load('drugs.RData')
+drugs$crack = as.numeric(drugs$drug == 'Crack')
+drugs_complete = na.omit(drugs)
+
+ps_model = glm(crack ~ age + circuit + sex + 
+                 citizen + educ + race, 
+               family=binomial('logit'), 
+               data=drugs_complete)
+ps = ps_model$fitted
+```
+
+
+# IPW
+
+
+## IPW
+
+- Besides matching, PS can be used for **inverse probability weighting** (**IPW**)
+    - Also callsed inverse probability of treatment weighting (IPTW)
+
+- Individuals can be weighted to match any population
+    - Can estimate ATE or ATT depending on weights
+    - Or the average effect in any other group
+
+
+## IPW
+
+Consider units with $e(x) = 0.20$
+
+- Every unit at this PS level has a 0.20 probability of being treated
+    - 1 in 5 are treated
+
+- Every unit at this PS level has a 0.80 probability of being untreated
+    - 4 in 5 are untreated
+
+- Treated units are outnumbered 4 to 1
+
+
+## IPW (ATE)
+
+**ATE** measures the effect in the entire population (represented by sample)
+
+- $ATE = E(Y^{(1)}) - E(Y^{(0)})$
+
+- Each treatment group is weighted to the entire sample at that PS level
+
+
+## IPW (ATE)
+
+To estimate $E(Y^{(1)})$:
+
+- Give units weight of $w^{(1)} = \frac{t}{e(x)}$
+    - In treatment group:
+    - $\frac{1}{e(x)} = \frac{1}{0.2} = 5$
+    - One treated unit counts for 5 sample units
+
+- $\frac{\sum_{i} w^{(1)}_i Y_i}{\sum_{i} w^{(1)}_i}$ estimates $E(Y^{(1)})$
+
+
+## IPW (ATE)
+
+To estimate $E(Y^{(0)})$:
+
+- Give units weight of $w^{(0)} = \frac{1 - t}{1 - e(x)}$
+    - In control group:
+    - $\frac{1 - 0}{1 - 0.2} = \frac{1}{0.8} = 5/4$
+    - Four control units count for a total of 5 sample units
+
+- $\frac{\sum_{i} w^{(0)}_i Y_i}{\sum_{i} w^{(0)}_i}$ estimates $E(Y^{(0)})$
+
+
+## IPW (ATE)
+
+- Estimate the ATE by comparing weighted averages:
+
+- $$ATE = E(Y^{(1)}) - E(Y^{(0)})$$
+
+- $$\widehat{ATE}_{IPW} = 
+\frac{\sum_{i} \frac{t_i}{e(x_i)} \times Y_i}{\sum_{i} \frac{t}{e(x_i)}} - 
+\frac{\sum_{i} \frac{(1 - t_i)}{1 - e(x_i)} \times Y_i}{\sum_{i} \frac{1 - t}{1 - e(x_i)}}$$
+
+
+## IPW (ATE)
+
+```{r}
+w_1_ate = drugs_complete$crack / ps
+w_0_ate = (1 - drugs_complete$crack) / (1 - ps)
+```
+
+
+## IPW (ATE)
+
+Compute weighted averages:
+
+```{r}
+(y1_ate = weighted.mean(x=drugs_complete$sentence, 
+                    w=w_1_ate))
+(y0_ate = weighted.mean(x=drugs_complete$sentence, 
+                    w=w_0_ate))
+(ate = y1_ate - y0_ate)
+```
+
+
+## IPW (ATT)
+
+**ATT** measures the effect of treatment on the treated population
+
+- $ATT = E(Y^{(1)} \mid T=1) - E(Y^{(0)} \mid T=1)$
+
+- Each treatment group is weighted to the treated sample at that PS level
+
+
+## IPW (ATT)
+
+To estimate $E(Y^{(1)} \mid T=1)$:
+
+- Give units weight of $t_i$
+    - Treatment group weights 1
+
+- $\frac{\sum_{i} t_i \times Y_i}{\sum_{i} t_i}$ estimates $E(Y^{(1)} \mid T=1)$
+    - Sample mean of treated
+
+
+## IPW (ATT)
+
+To estimate $E(Y^{(0)} \mid T=1)$:
+
+- Give units weight of $w^{(0)} = \frac{(1 - t_i) \times e(x)}{1 - e(x)}$
+    - In control group:
+    - $\frac{e(x)}{1 - e(x)} = \frac{0.2}{0.8} = 1/4$
+    - Four control units count for a total of 1 treated unit
+
+- $\frac{\sum_{i} w^{(0)}_i Y_i}{\sum_{i} w^{(0)}_i}$ estimates $E(Y^{(0)} \mid T=1)$
+    - Counterfactual mean
+
+
+## IPW (ATT)
+
+- Estimate the ATT by comparing weighted averages:
+
+- $$ATT = E(Y^{(1)} \mid T=1) - E(Y^{(0)} \mid T=1)$$
+
+- $$\widehat{ATT}_{IPW} = 
+\frac{\sum_{i} t_i \times Y_i}{\sum_{i} t_i} - 
+\frac{\sum_{i} w^{(0)}_i Y_i}{\sum_{i} w^{(0)}_i}$$
+
+
+## IPW (ATT)
+
+```{r}
+w_1_att = drugs_complete$crack
+w_0_att = (1 - drugs_complete$crack) * ps / (1 - ps)
+```
+
+
+## IPW (ATT)
+
+Compute weighted averages:
+
+```{r}
+(y1_att = weighted.mean(x=drugs_complete$sentence, 
+                    w=w_1_att))
+(y0_att = weighted.mean(x=drugs_complete$sentence, 
+                    w=w_0_att))
+(att = y1_att - y0_att)
+```
+
+
+## IPW
+
+Summary:
+
+
+Parameter      $w^{(1)}$             $w^{(0)}$
+-----------  --------------------  ---------------------------
+ATE            $\frac{t}{e(x)}$      $\frac{1 - t}{1 - e(x)}$
+ATT            $t$                   $\frac{(1 - t) \times e(x)}{1 - e(x)}$
+
+
+# Weighting diagnostics
+
+
+## Weighting diagnostics
+
+- Weights works well as long as they are not too large
+
+- Large weights:
+    - Increase standard errors
+    - Indicate positivity problems
+
+- The most common diagnostics
+    - Check treatment group weight total
+    - Check extreme weights
+
+
+## Weighting diagnostics
+
+- Weights should total to the size of the relevant sample
+    - ATE: total sample size
+    - ATT: treatment group sample size
+
+
+## Weighting diagnostics
+
+Using ATE weights:
+
+```{r}
+nrow(drugs_complete)
+
+sum(w_1_ate)
+sum(w_1_ate) / nrow(drugs_complete)
+```
+
+
+## Weighting diagnostics
+
+Using ATE weights:
+
+```{r}
+nrow(drugs_complete)
+
+sum(w_0_ate)
+sum(w_0_ate) / nrow(drugs_complete)
+```
+
+
+## Weighting diagnostics
+
+Using ATT weights:
+
+```{r}
+sum(drugs_complete$crack==1)
+
+sum(w_0_att)
+sum(w_0_att) / sum(drugs_complete$crack==1)
+```
+
+- Why not check `w_1_att`?
+
+
+## Weighting diagnostics
+
+- "Uncommon" subjects are given larger weights
+    - Treated units with $e(x) \approx 0$
+    - Control units with $e(x) \approx 1$
+
+- Example: if a treated unit has $e(x) = 0.01$, then $w^{(1)} = \frac{1}{0.01} = 100$
+    - A single treated unit accounts for 100 sample units
+    - A small change in $e(x)$ yield a large change in weight
+        - $e(x) = 0.02 \rightarrow w^{(1)} = 50$
+
+
+## Weighting diagnostics
+
+```{r}
+summary(w_1_ate[drugs_complete$crack==1])
+sort(w_1_ate, decreasing=TRUE)[1:10]
+```
+
+
+## Weighting diagnostics
+
+```{r}
+summary(w_0_ate[drugs_complete$crack==0])
+sort(w_0_ate, decreasing=TRUE)[1:10]
+```
+
+
+## Weighting diagnostics
+
+- A common approach for handling extreme weights is **weight truncation**
+    - Large weights are capped to some pre-determined value
+    - Usually 10-20
+
+- Another bias-variance tradeoff
+    - PS weighting is unbiased (given assumptions)
+    - Large weights lead to large variance
+    - Artificially truncating weights will reduce variance, but add bias
+
+
+## Weighting diagnostics
+
+To cap weights at 15:
+
+```{r}
+w_1_trunc = pmin(w_1_ate, 15)
+w_0_trunc = pmin(w_0_ate, 15)
+
+nrow(drugs_complete)
+
+sum(w_1_trunc)
+sum(w_0_trunc)
+```
+
+
+## Weighting diagnostics
+
+```{r}
+(y1_trunc = weighted.mean(x=drugs_complete$sentence, 
+                          w=w_1_trunc))
+(y0_trunc = weighted.mean(x=drugs_complete$sentence, 
+                          w=w_0_trunc))
+(ate_trunc = y1_trunc - y0_trunc)
+```
+
+
+## Standard errors and confidence intervals
+
+- SEs and CIs are not as straightforward
+- Weights are data-dependent
+    - Random
+    - Correlated with $Y$
+
+- Two choices:
+    - Use estimates from survey weighting (sandwich estimator)
+        - Tends to be over-conservative
+    - Bootstrap
+        - Computationally difficult
+
+
+## Standard errors and confidence intervals
+
+- To use survey weighting methods, need **survey** package
+    - `install.packages('survey')`
+    - `load(survey)`
+
+- Needs to create a survey object that includes weights
+
+
+## Standard errors and confidence intervals
+
+```{r, message=FALSE, warning=FALSE}
+library(survey)
+
+w_ate = w_1_ate + w_0_ate
+
+drugs_survey = svydesign(ids=~0, 
+                         data=drugs_complete, 
+                         weights=w_ate)
+```
+
+
+## Standard errors and confidence intervals
+
+To get weighted estimate, run a regression of outcome on treatment
+
+```{r}
+ate_model = svyglm(sentence ~ crack, 
+                   design=drugs_survey)
+summary(ate_model)$coefficients
+
+c(17.35 - 1.96*4.45, 17.35 + 1.96*4.45)
+```
+
+
+## Standard errors and confidence intervals
+
+- For binary outcome data, include **family=binomial('logit')** for logistic regression
+- To get CI for the odds ratio:
+    - Estimate $\pm 1.96\times$ standard error
+    - Exponentiate (**exp()**)
+
+
+## Standard errors and confidence intervals
+
+- To bootstrap:
+    1. Write a function that will resample data and compute weighted estimate
+    2. Apply function to data large number of times (10,000)
+    3. Middle 95% of estimates make up CI
+
+
+## Standard errors and confidence intervals
+
+(See RMarkdown file for bootstrap code)
+
+```{r, echo=FALSE}
+ate_boot = function(x){
+  
+  # sample data
+  boot_index = sample.int(nrow(x), size=nrow(x), 
+                          replace=TRUE)
+  boot_data = x[boot_index, ]
+  
+  # create ps
+  boot_ps_model = glm(crack ~ age + circuit + sex + 
+                        citizen + educ + race, 
+                      family=binomial('logit'), 
+                      data=boot_data)
+  boot_ps = boot_ps_model$fitted
+  
+  # create weights
+  boot_wt_1 = boot_data$crack / boot_ps
+  boot_wt_0 = (1 - boot_data$crack) / (1 - boot_ps)
+  
+  # estimate ATE
+  boot_y1 = weighted.mean(x=boot_data$sentence, w=boot_wt_1)
+  boot_y0 = weighted.mean(x=boot_data$sentence, w=boot_wt_0)
+  boot_y1 - boot_y0
+}
+```
+
+
+## Standard errors and confidence intervals
+
+```{r}
+boot_ates = replicate(n=100, 
+                      expr=ate_boot(x=drugs_complete))
+hist(boot_ates, main='Bootstrap histogram', 
+     xlab='ATE estimate')
+```
+
+
+## Standard errors and confidence intervals
+
+```{r}
+quantile(boot_ates, probs=c(0.025, 0.975))
+```
