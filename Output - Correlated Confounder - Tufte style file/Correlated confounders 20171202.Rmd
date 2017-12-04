@@ -3,13 +3,13 @@ title: "Correlated Counfounder and Propensity Score Matching"
 author: "Miao Cai"
 date: '`r Sys.Date()`'
 output:
-  tufte::tufte_html: default
   tufte::tufte_handout:
     citation_package: natbib
     latex_engine: xelatex
   tufte::tufte_book:
     citation_package: natbib
     latex_engine: xelatex
+  tufte::tufte_html: default
 link-citations: yes
 ---
 
@@ -21,8 +21,8 @@ options(htmltools.dir.version = FALSE)
 ```
 
 # Corrections in this 20171202 version
-## 1 Keep the directions of Cohen's d consistent across all comparisons
-This is correctified by explicitly assigning the levels of the factors `levels = c(0, 1)` in `cohen.d(dat$y,factor(dat$tr, levels = c(0, 1)))$estimate`.
+
+## 1 Keep the directions of Cohen's d consistent across all comparisons^[This is correctified by explicitly assigning the levels of the factors `levels = c(0, 1)` in `cohen.d(dat$y,factor(dat$tr, levels = c(0, 1)))$estimate`.]
 
 ## 2 Cohen's d for all 9 covariates, for 3 covariates and 3 PCs
 
@@ -32,6 +32,7 @@ This is correctified by explicitly assigning the levels of the factors `levels =
 
 ## 4 Adding the Sufficient Reduction Method
 
+\newpage
 
 # Creating simulation data
 Random variables $X_1$ - $X_3$ have the correlation coefficient of 0.3; random variables $X_4$ - $X_6$ have the correlation coefficient of 0.5; random variables $X_7$ - $X_9$ have the correlation coefficient of 0.8. The true population parameters for $X_1, X_4, X_7$ is 2, parameters for $X_2, X_5, X_8$ is 3, parameters for $X_3, X_6, X_9$ is 1.
@@ -249,14 +250,14 @@ cohen.d(matcheddata2$X9,factor(matcheddata2$tr, levels = c(0, 1)))$estimate
 ```
 \newpage
 
-# Part 3 Five Covariates (X1 ~ X5)
-This part compares the results regressing $X_1$ - $X_5$ on y and the regression after propensity score matching.
+# Part 3 Five Covariates (X1 ~ X4, X7)
+This part compares the results regressing $X_1$ - $X_4$ and $X_7$ on y and the regression after propensity score matching.
 
 ## Section 3.1 Five covariates without matching
-## 3.1.1 `y ~ tr + X1~X5` on unmatched data
+## 3.1.1 `y ~ tr + X1~X4 + X7` on unmatched data
 ```{r}
 library(effsize)
-lm3.1.1 <- lm(y ~ tr + X1 + X2 + X3 + X4 + X5,
+lm3.1.1 <- lm(y ~ tr + X1 + X2 + X3 + X4 + X7,
               data = dat)
 
 # summary the output
@@ -275,7 +276,7 @@ cohen.d(dat$y,factor(dat$tr, levels = c(0, 1)))$estimate
 ```{r}
 #1 match the treatment and comparison groups - 1 to 1 match
 matcheddata3 <- match.data(
-  matchit(tr ~ X1 + X2 + X3 + X4 + X5, 
+  matchit(tr ~ X1 + X2 + X3 + X4 + X7, 
           data = dat, 
           method = "nearest", 
           ratio = 1))
@@ -293,7 +294,7 @@ cohen.d(matcheddata3$y, factor(matcheddata3$tr, levels = c(0, 1)))$estimate
 ## 3.2.2 `y ~ tr + X1~X7` on matched data
 ```{r}
 # linear regression - y, treatment and 5 covariates
-lm3.2.2 <- lm(y ~ tr + X1 + X2 + X3 + X4 + X5, 
+lm3.2.2 <- lm(y ~ tr + X1 + X2 + X3 + X4 + X7, 
             data = matcheddata3)
 knitr::kable(
   summary(lm3.2.2)$coefficients, 
@@ -629,9 +630,9 @@ matcheddata6 <- match.data(
 matcheddata6 <- cbind(matcheddata6, dat[rownames(matcheddata6),-c(which(colnames(dat) == "y"), which(colnames(dat) == "tr"))])
 
 #2 linear regression - y and treatment
-lm6.1 <- lm(y ~ tr, data = matcheddata6)
+lm6.2.1 <- lm(y ~ tr, data = matcheddata6)
 knitr::kable(
-  summary(lm6.1)$coefficients, 
+  summary(lm6.2.1)$coefficients, 
   caption = 'Linear regression between y and treatment on matched data', 
   digits = 3
 )
@@ -643,10 +644,10 @@ cohen.d(matcheddata6$y, factor(matcheddata6$tr, levels = c(0, 1)))$estimate
 ## 6.2.2 `y ~ tr + 3PC` on matched data
 ```{r}
 #1 linear regression - y， treatment and covariates
-lm6.2 <- lm(y ~ tr + PC1 + PC2 + PC3, 
+lm6.2.2 <- lm(y ~ tr + PC1 + PC2 + PC3, 
             data = matcheddata6)
 knitr::kable(
-  summary(lm6.2)$coefficients, 
+  summary(lm6.2.2)$coefficients, 
   caption = 'Linear regression between y ,treatment and 3 PCs on matched data', 
   digits = 3
 )
@@ -673,6 +674,55 @@ cohen.d(matcheddata6$X7,factor(matcheddata6$tr, levels = c(0, 1)))$estimate
 cohen.d(matcheddata6$X8,factor(matcheddata6$tr, levels = c(0, 1)))$estimate
 cohen.d(matcheddata6$X9,factor(matcheddata6$tr, levels = c(0, 1)))$estimate
 ```
+
+```{r digits, echo = FALSE}
+options(digits=2)
+```
+
+# Summary Table of the above information
+Statistics | No matching | Nine Covariates | Seven Covariates($X_1$ - $X_7$) | Five Covariates ($X_1$ - $X_4$, $X_7$) | Three Covariates ($X_1$, $X_4$, $X_7$) | 3 PCs(1 decomp) | 3 PCs (3 decomp)
+----------- | ----------- | ----------- | ----------- | ----------- | ----------- | -----------
+y ~ tr + covariates, tr coefficient (pre-match)|`r unname(lm1.1.2$coefficients[which(labels(lm1.1.2$coefficients)== "tr")])` | `r unname(lm1.1.2$coefficients[which(labels(lm1.1.2$coefficients)== "tr")])`| `r unname(lm2.1.1$coefficients[which(labels(lm2.1.1$coefficients)== "tr")])`| `r unname(lm3.1.1$coefficients[which(labels(lm3.1.1$coefficients)== "tr")])`| `r unname(lm4.1.1$coefficients[which(labels(lm4.1.1$coefficients)== "tr")])` | `r unname(lm5.1.2$coefficients[which(labels(lm5.1.2$coefficients)== "tr")])` | `r unname(lm6.1.2$coefficients[which(labels(lm6.1.2$coefficients)== "tr")])`
+cohen's d, x1 ~ tr|`r unname(cohen.d(dat$X1,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X1,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X1,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X1,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X1,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X1,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X1,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+cohen's d, x2 ~ tr|`r unname(cohen.d(dat$X2,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X2,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X2,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X2,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X2,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X2,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X2,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+cohen's d, x3 ~ tr|`r unname(cohen.d(dat$X3,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X3,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X3,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X3,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X3,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X3,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X3,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+cohen's d, x4 ~ tr|`r unname(cohen.d(dat$X4,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X4,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X4,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X4,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X4,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X4,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X4,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+cohen's d, x5 ~ tr|`r unname(cohen.d(dat$X5,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X5,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X5,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X5,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X5,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X5,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X5,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+cohen's d, x6 ~ tr|`r unname(cohen.d(dat$X6,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X6,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X6,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X6,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X6,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X6,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X6,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+cohen's d, x7 ~ tr|`r unname(cohen.d(dat$X7,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X7,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X7,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X7,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X7,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X7,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X7,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+cohen's d, x8 ~ tr|`r unname(cohen.d(dat$X8,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X8,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X8,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X8,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X8,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X8,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X8,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+cohen's d, x9 ~ tr|`r unname(cohen.d(dat$X9,factor(dat$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata1$X9,factor(matcheddata1$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata2$X9,factor(matcheddata2$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata3$X9,factor(matcheddata3$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata4$X9,factor(matcheddata4$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata5$X9,factor(matcheddata5$tr, levels = c(0, 1)))$estimate)`|`r unname(cohen.d(matcheddata6$X9,factor(matcheddata6$tr, levels = c(0, 1)))$estimate)`
+y ~ tr, tr coef|`r unname(lm1.1.1$coefficients[which(labels(lm1.1.1$coefficients)== "tr")])`|`r unname(lm1.2.1$coefficients[which(labels(lm1.2.1$coefficients)== "tr")])`|`r unname(lm2.2.1$coefficients[which(labels(lm2.2.1$coefficients)== "tr")])`|`r unname(lm3.2.1$coefficients[which(labels(lm3.2.1$coefficients)== "tr")])`|`r unname(lm4.2.1$coefficients[which(labels(lm4.2.1$coefficients)== "tr")])`|`r unname(lm5.2.1$coefficients[which(labels(lm5.2.1$coefficients)== "tr")])`|`r unname(lm6.2.1$coefficients[which(labels(lm6.2.1$coefficients)== "tr")])`
+y ~ tr + covariates, tr coef|`r unname(lm1.1.2$coefficients[which(labels(lm1.1.2$coefficients)== "tr")])` | `r unname(lm1.2.2$coefficients[which(labels(lm1.2.2$coefficients)== "tr")])`| `r unname(lm2.2.2$coefficients[which(labels(lm2.2.2$coefficients)== "tr")])`|`r unname(lm3.2.2$coefficients[which(labels(lm3.2.2$coefficients)== "tr")])`|`r unname(lm4.2.2$coefficients[which(labels(lm4.2.2$coefficients)== "tr")])`|`r unname(lm5.2.2$coefficients[which(labels(lm5.2.2$coefficients)== "tr")])`|`r unname(lm6.2.2$coefficients[which(labels(lm6.2.2$coefficients)== "tr")])`
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
